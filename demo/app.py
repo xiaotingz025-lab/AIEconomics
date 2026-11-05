@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import yfinance as yf
 from fredapi import Fred
-import google.generativeai as genai
 
 # 頁面基本配置
 st.set_page_config(page_title="總體經濟與金融即時儀表板", layout="wide")
@@ -12,19 +11,11 @@ st.title("🌐 全球總體經濟與金融指標即時儀表板")
 # 側邊欄：輸入 API Key 與刷新控制
 st.sidebar.header("⚙️ 設定與金鑰")
 
-# FRED API Key 設定
 if "FRED_API_KEY" in st.secrets:
     fred_key = st.secrets["FRED_API_KEY"]
-    st.sidebar.success("已自動讀取 FRED API Key！")
+    st.sidebar.success("已自動讀取 Secrets 中的 API Key！")
 else:
     fred_key = st.sidebar.text_input("請輸入你的 FRED API Key:", type="password")
-
-# Gemini API Key 設定 (新增)
-if "GEMINI_API_KEY" in st.secrets:
-    gemini_key = st.secrets["GEMINI_API_KEY"]
-    st.sidebar.success("已自動讀取 Gemini API Key！")
-else:
-    gemini_key = st.sidebar.text_input("請輸入你的 Gemini API Key:", type="password", help="用於產生 AI 總經短評")
 
 if st.sidebar.button("手動刷新數據"):
     st.cache_data.clear()
@@ -36,7 +27,7 @@ def get_fred_data(api_key):
     data = {
         "CPI 物價指數": fred.get_series("CPIAUCSL"),
         "10年期美債殖利率": fred.get_series("DGS10"),
-        "2年期美債殖利率": fred.get_series("DGS2"),
+        "2年期美債殖利率": fred.get_series("DGS2"),         # 新增：2年期美債殖利率
         "美國失業率": fred.get_series("UNRATE"),
         "聯邦基金利率": fred.get_series("FEDFUNDS"),
         "日本10年期國債殖利率": fred.get_series("IRLTLT01JPM156N")
@@ -67,7 +58,7 @@ if fred_key:
         macro_df = get_fred_data(fred_key)
         market_df = get_market_data()
 
-        # 第一區塊：關鍵總體經濟指標與利差監控 (FRED)
+        # 第一區塊：關鍵總體經濟指標 (FRED) - 佈局調整
         st.subheader("📊 關鍵總體經濟指標與利差監控 (FRED)")
         
         # 取得最新利差數據以進行警示判斷
@@ -137,6 +128,8 @@ if fred_key:
             
         with tab2:
             macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns, key="macro_select")
+            
+            # 如果選擇了利差，可以額外加上一條 0 軸參考線讓畫面更直覺
             if macro_choice == "美債10Y-2Y利差":
                 fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢（負值代表倒掛）")
                 fig2.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="倒掛分界線 (0%)")
@@ -144,42 +137,6 @@ if fred_key:
                 fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
                 
             st.plotly_chart(fig2, use_container_width=True)
-
-        # 第四區塊：AI 總體經濟摘要 (新增)
-        st.write("---")
-        st.subheader("🤖 AI 總體經濟即時短評")
-        
-        if st.button("產生 AI 總體經濟摘要", type="primary"):
-            if not gemini_key:
-                st.error("請先在左側側邊欄輸入您的 Gemini API Key，才能使用 AI 摘要功能！")
-            else:
-                with st.spinner("AI 正在分析最新總體經濟與市場數據中..."):
-                    try:
-                        genai.configure(api_key=gemini_key)
-                        model = genai.GenerativeModel("gemini-1.5-flash")
-                        
-                        # 取得最新資料
-                        latest_jp = macro_df["日本10年期國債殖利率"].dropna().iloc[-1]
-                        
-                        prompt = f"""
-                        你是一位專業的總體經濟學家與金融分析師。請根據以下最新的美國與全球總經數據，為投資人撰寫一份約 200 字的繁體中文總體經濟短評，分析當前經濟情勢與潛在投資風險：
-                        - CPI 物價指數: {latest_cpi:.1f}
-                        - 10年期美債殖利率: {latest_10y:.2f}%
-                        - 2年期美債殖利率: {latest_2y:.2f}%
-                        - 10Y-2Y 美債利差: {latest_spread:.2f}% ({'已出現殖利率倒掛' if latest_spread < 0 else '維持正常'})
-                        - 美國失業率: {latest_unemp:.1f}%
-                        - 聯邦基金利率: {latest_fed:.2f}%
-                        - 日本 10 年期國債殖利率: {latest_jp:.2f}%
-                        
-                        請確保語氣專業客觀、觀點精闢，排版清晰。
-                        """
-                        
-                        response = model.generate_content(prompt)
-                        st.success("✨ AI 總經短評生成完畢：")
-                        st.markdown(response.text)
-                        
-                    except Exception as e:
-                        st.error(f"AI 摘要生成失敗，請確認 Gemini API Key 是否正確。錯誤訊息: {e}")
 
     except Exception as e:
         st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
