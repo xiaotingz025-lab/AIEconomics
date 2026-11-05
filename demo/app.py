@@ -146,7 +146,6 @@ if fred_key:
             st.plotly_chart(fig2, use_container_width=True)
 
         # 第四區塊：AI 總體經濟摘要 (使用 google-genai)
-# 第四區塊：AI 總體經濟摘要 (加入 503 錯誤判別)
         st.write("---")
         st.subheader("🤖 AI 總體經濟即時短評")
         
@@ -156,6 +155,7 @@ if fred_key:
             else:
                 with st.spinner("AI 正在分析最新總體經濟與市場數據中..."):
                     try:
+                        # 初始化 google-genai Client
                         client = genai.Client(api_key=gemini_key)
                         
                         latest_jp = macro_df["日本10年期國債殖利率"].dropna().iloc[-1]
@@ -173,25 +173,9 @@ if fred_key:
                         請確保語氣專業客觀、觀點精闢，排版清晰。
                         """
                         
+                        # 呼叫最新 gemini-2.5-flash 模型
                         response = client.models.generate_content(
                             model='gemini-2.5-flash',
-                            contents=prompt,
-                        )
-                        
-                        st.success("✨ AI 總經短評生成完畢：")
-                        st.markdown(response.text)
-                        
-                    except Exception as e:
-                        # 特別攔截 503 伺服器忙碌錯誤
-                        if "503" in str(e) or "UNAVAILABLE" in str(e):
-                            st.warning("⚠️ **Google 伺服器目前流量較大（高負載）**，此為暫時現象。請稍候幾秒鐘後再次點擊按鈕即可！")
-                        else:
-                            st.error(f"AI 摘要生成失敗，請確認 Gemini API Key 是否正確。錯誤訊息: {e}")
-                        """
-                        
-                        # 呼叫最新 gemini-3.8-flash 模型
-                        response = client.models.generate_content(
-                            model='gemini-3.8-flash',
                             contents=prompt,
                         )
                         
