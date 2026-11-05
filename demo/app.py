@@ -173,9 +173,9 @@ if fred_key:
                         請確保語氣專業客觀、觀點精闢，排版清晰。
                         """
                         
-                        # 呼叫最新 gemini-2.5-flash 模型
+                        # 呼叫最新 gemini-3.8-flash 模型
                         response = client.models.generate_content(
-                            model='gemini-2.5-flash',
+                            model='gemini-3.8-flash',
                             contents=prompt,
                         )
                         
