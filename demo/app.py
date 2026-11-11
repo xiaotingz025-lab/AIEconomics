@@ -155,7 +155,6 @@ if fred_key:
             else:
                 with st.spinner("AI 正在分析最新總體經濟與市場數據中..."):
                     try:
-                        # 初始化 google-genai Client
                         client = genai.Client(api_key=gemini_key)
                         
                         latest_jp = macro_df["日本10年期國債殖利率"].dropna().iloc[-1]
@@ -173,9 +172,9 @@ if fred_key:
                         請確保語氣專業客觀、觀點精闢，排版清晰。
                         """
                         
-                        # 改回正確穩定的標準模型代號：gemini-2.5-flash
+                        # 更新為官方建議的 gemini-3.8-flash 模型
                         response = client.models.generate_content(
-                            model='gemini-2.5-flash',
+                            model='gemini-3.8-flash',
                             contents=prompt,
                         )
                         
@@ -183,7 +182,6 @@ if fred_key:
                         st.markdown(response.text)
                         
                     except Exception as e:
-                        # 錯誤防護：精確識別伺服器忙碌與其他例外
                         if "503" in str(e) or "UNAVAILABLE" in str(e):
                             st.warning("⚠️ **Google 伺服器目前流量較大（高負載）**，此為暫時現象。請稍候幾秒鐘後再次點擊按鈕即可！")
                         else:
