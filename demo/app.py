@@ -1,16 +1,3 @@
-這個錯誤的關鍵原因在於程式碼中所使用的模型名稱：`model='gemini-3.8-flash'`。
-
-目前 Google Gemini API 並沒有這個模型代號（因此伺服器找不到該模型或判定該請求無效，回傳了 503 伺服器無法服務的錯誤）。目前標準且穩定的 Flash 模型代號為 **`gemini-2.5-flash`**。
-
-另外，我們也一併將程式碼中的非列印字元（縮排空格）清理乾淨，並加入了針對 503 錯誤的智慧判斷提示，避免未來伺服器若遇短暫高負載時被誤導。
-
----
-
-### 🛠️ 修正後的完整 `app.py` 程式碼
-
-您可以直接複製以下完整程式碼來替換您的檔案：
-
-```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
