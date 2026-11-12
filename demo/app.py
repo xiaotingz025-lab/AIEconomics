@@ -46,10 +46,14 @@ def get_fred_data(api_key):
     data = {
         "CPI 物價指數": fred.get_series("CPIAUCSL"),
         "10年期美債殖利率": fred.get_series("DGS10"),
+        "2年期美債殖利率": fred.get_series("DGS2"),
         "美國失業率": fred.get_series("UNRATE"),
-        "聯邦基金利率": fred.get_series("FEDFUNDS")
+        "聯邦基金利率": fred.get_series("FEDFUNDS"),
+        "日本10年期國債殖利率": fred.get_series("IRLTLT01JPM156N")
     }
     df = pd.DataFrame(data).ffill().tail(365)
+    # 計算 10 年期減 2 年期美債殖利率利差
+    df["美債10Y-2Y利差"] = df["10年期美債殖利率"] - df["2年期美債殖利率"]
     return df
 
 @st.cache_data(ttl=600)
@@ -58,7 +62,8 @@ def get_market_data():
         "S&P 500": "^GSPC",
         "台灣加權指數": "^TWII",
         "布蘭特原油": "BZ=F",
-        "美元/台幣匯率": "TWD=X"
+        "美元/台幣匯率": "TWD=X",
+        "黃金現貨價格": "GC=F"
     }
     df = yf.download(list(tickers.values()), period="1y")["Close"]
     df.rename(columns={v: k for k, v in tickers.items()}, inplace=True)
@@ -79,22 +84,37 @@ if fred_key:
         macro_df = get_fred_data(fred_key)
         market_df = get_market_data()
 
-        # 第一區塊：核心總經 KPI 卡片
-        st.subheader("📊 關鍵總體經濟指標 (FRED)")
-        col1, col2, col3, col4 = st.columns(4)
+        # 第一區塊：核心總經 KPI 卡片與利差監控
+        st.subheader("📊 關鍵總體經濟指標與利差監控 (FRED)")
+        
+        latest_spread = macro_df["美債10Y-2Y利差"].dropna().iloc[-1]
+        spread_prev = macro_df["美債10Y-2Y利差"].dropna().iloc[-2]
+
+        if latest_spread < 0:
+            st.warning(f"⚠️ **【警示】美債 10Y-2Y 殖利率曲線出現倒掛！** 目前利差為 **{latest_spread:.2f}%**（小於 0）。歷史經驗顯示這往往是經濟衰退的領先指標，請留意市場風險。")
+        else:
+            st.success(f"✅ **美債 10Y-2Y 殖利率曲線正常**：目前利差為 **{latest_spread:.2f}%**（大於等於 0）。")
+
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
         
         latest_cpi = macro_df["CPI 物價指數"].dropna().iloc[-1]
         col1.metric("CPI 物價指數", f"{latest_cpi:.1f}")
         
-        latest_rate = macro_df["10年期美債殖利率"].dropna().iloc[-1]
-        rate_prev = macro_df["10年期美債殖利率"].dropna().iloc[-2]
-        col2.metric("10年美債殖利率", f"{latest_rate:.2f}%", f"{latest_rate - rate_prev:+.2f}%")
+        latest_10y = macro_df["10年期美債殖利率"].dropna().iloc[-1]
+        rate_prev_10y = macro_df["10年期美債殖利率"].dropna().iloc[-2]
+        col2.metric("10年美債殖利率", f"{latest_10y:.2f}%", f"{latest_10y - rate_prev_10y:+.2f}%")
         
+        latest_2y = macro_df["2年期美債殖利率"].dropna().iloc[-1]
+        rate_prev_2y = macro_df["2年期美債殖利率"].dropna().iloc[-2]
+        col3.metric("2年美債殖利率", f"{latest_2y:.2f}%", f"{latest_2y - rate_prev_2y:+.2f}%")
+
+        col4.metric("10Y-2Y 利差", f"{latest_spread:.2f}%", f"{latest_spread - spread_prev:+.2f}%")
+
         latest_unemp = macro_df["美國失業率"].dropna().iloc[-1]
-        col3.metric("美國失業率", f"{latest_unemp:.1f}%")
+        col5.metric("美國失業率", f"{latest_unemp:.1f}%")
         
         latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
-        col4.metric("聯邦基金利率", f"{latest_fed:.2f}%")
+        col6.metric("聯邦基金利率", f"{latest_fed:.2f}%")
 
         st.write("---")
 
@@ -114,7 +134,11 @@ if fred_key:
         # 頁籤 2: 總體經濟
         with tab2:
             macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns, key="macro_choice_tab2")
-            fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
+            if macro_choice == "美債10Y-2Y利差":
+                fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢（負值代表倒掛）")
+                fig2.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="倒掛分界線 (0%)")
+            else:
+                fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
             st.plotly_chart(fig2, use_container_width=True)
 
         # 頁籤 3: NLP 市場新聞與情緒分析
@@ -150,12 +174,15 @@ if fred_key:
 2. 貨幣政策立場判定 (鷹派/鴿派/中立)
 3. 重點分析與逐條評分表格 (Markdown Format)"""
                                     
-                                    # 使用官方建議的 gemini-3.8-flash 模型
+                                    # 使用正確的官方標準模型
                                     model = genai.GenerativeModel("gemini-3.8-flash")
                                     response = model.generate_content(prompt)
                                     st.markdown(response.text)
                                 except Exception as e:
-                                    st.error(f"AI 分析時發生錯誤: {e}")
+                                    if "503" in str(e) or "UNAVAILABLE" in str(e):
+                                        st.warning("⚠️ **Google 伺服器目前流量較大（高負載）**，此為暫時現象。請稍候幾秒鐘後再次點擊按鈕即可！")
+                                    else:
+                                        st.error(f"AI 分析時發生錯誤: {e}")
                         else:
                             st.warning("尚無新聞數據可供分析。")
                 else:
@@ -163,7 +190,5 @@ if fred_key:
 
     except Exception as e:
         st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
-else:
-    st.info("👈 請在左側輸入您的 FRED API Key 以開啟儀表板。")
 else:
     st.info("👈 請在左側輸入您的 FRED API Key 以開啟儀表板。")
