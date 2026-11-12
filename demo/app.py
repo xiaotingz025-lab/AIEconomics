@@ -10,8 +10,8 @@ from urllib.parse import quote  # 解決 URL 空白字元轉碼問題
 # ==========================================
 # 1. 頁面配置與側邊欄金鑰設定
 # ==========================================
-st.set_page_config(page_title="總體經濟、金融與 NLP 市場情緒儀表板", layout="wide")
-st.title("🌐 總體經濟、金融指標與 AI 輿論情緒即時儀表板")
+st.set_page_config(page_title="總體經濟、金融與 AI 智慧儀表板", layout="wide")
+st.title("🌐 全球總體經濟、金融指標與 AI 智慧互動儀表板")
 
 st.sidebar.header("⚙️ 設定與金鑰")
 
@@ -22,14 +22,14 @@ if "FRED_API_KEY" in st.secrets:
 else:
     fred_key = st.sidebar.text_input("請輸入 FRED API Key:", type="password")
 
-# 1.2 檢查 Gemini API Key (NLP 情緒分析用)
+# 1.2 檢查 Gemini API Key (NLP 與聊天室用)
 gemini_key = None
 if "GEMINI_API_KEY" in st.secrets:
     gemini_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=gemini_key)
     st.sidebar.success("已自動讀取 Gemini API Key！")
 else:
-    gemini_input = st.sidebar.text_input("請輸入 Gemini API Key (情緒分析用):", type="password")
+    gemini_input = st.sidebar.text_input("請輸入 Gemini API Key:", type="password")
     if gemini_input:
         gemini_key = gemini_input
         genai.configure(api_key=gemini_key)
@@ -52,7 +52,6 @@ def get_fred_data(api_key):
         "日本10年期國債殖利率": fred.get_series("IRLTLT01JPM156N")
     }
     df = pd.DataFrame(data).ffill().tail(365)
-    # 計算 10 年期減 2 年期美債殖利率利差
     df["美債10Y-2Y利差"] = df["10年期美債殖利率"] - df["2年期美債殖利率"]
     return df
 
@@ -118,20 +117,22 @@ if fred_key:
 
         st.write("---")
 
-        # 第二區塊：分頁儀表板
-        tab1, tab2, tab3 = st.tabs([
-            "📈 金融市場走勢 (yfinance)", 
-            "🏛️ 總體經濟趨勢 (FRED)", 
-            "📰 NLP 市場新聞與鷹鴿情緒分析"
+        # 第二區塊：多分頁儀表板（新增相關係數與 AI 聊天室）
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📈 金融市場走勢", 
+            "🏛️ 總體經濟趨勢", 
+            "🔗 多資產相關係數熱力圖", 
+            "📰 新聞輿論與鷹鴿情緒",
+            "💬 AI 總經與數據對話室"
         ])
         
-        # 頁籤 1: 金融市場
+        # 頁籤 1: 金融市場走勢
         with tab1:
             market_choice = st.selectbox("選擇金融市場標的：", market_df.columns, key="market_choice_tab1")
             fig1 = px.line(market_df, y=market_choice, title=f"{market_choice} 近一年走勢")
             st.plotly_chart(fig1, use_container_width=True)
             
-        # 頁籤 2: 總體經濟
+        # 頁籤 2: 總體經濟趨勢
         with tab2:
             macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns, key="macro_choice_tab2")
             if macro_choice == "美債10Y-2Y利差":
@@ -141,11 +142,30 @@ if fred_key:
                 fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
             st.plotly_chart(fig2, use_container_width=True)
 
-        # 頁籤 3: NLP 市場新聞與情緒分析
+        # 頁籤 3: 多資產相關係數熱力圖 (New!)
         with tab3:
+            st.subheader("🔗 總經指標與金融資產相關係數矩陣")
+            st.markdown("透過對齊時間序列，觀察各項總經數據與金融資產（如美債、S&P 500、黃金、原油）之間的連動與互補關係。")
+            
+            # 合併總經與市場數據並計算相關係數
+            combined_df = pd.concat([macro_df, market_df], axis=1).dropna()
+            corr_matrix = combined_df.corr()
+            
+            fig_corr = px.imshow(
+                corr_matrix, 
+                text_auto=".2f", 
+                aspect="auto", 
+                color_continuous_scale="RdBu_r", 
+                range_color=[-1, 1],
+                title="總體經濟與金融資產相關性熱力圖"
+            )
+            st.plotly_chart(fig_corr, use_container_width=True)
+
+        # 頁籤 4: 新聞輿論與情緒分析
+        with tab4:
             st.subheader("📰 即時財經新聞與 LLM 鷹鴿派情緒分析")
             
-            search_kw = st.text_input("🔍 輸入新聞關鍵字 (預設: Federal Reserve Inflation):", value="Federal Reserve Inflation")
+            search_kw = st.text_input("🔍 輸入新聞關鍵字:", value="Federal Reserve Inflation")
             news_titles = fetch_google_news(search_kw)
 
             nlp_col1, nlp_col2 = st.columns([1, 1])
@@ -156,7 +176,7 @@ if fred_key:
                     for i, title in enumerate(news_titles, 1):
                         st.write(f"**{i}.** {title}")
                 else:
-                    st.warning("查無相關新聞標題，請嘗試更換關鍵字。")
+                    st.warning("查無相關新聞標題。")
 
             with nlp_col2:
                 st.markdown("### 🤖 Gemini AI 鷹鴿派與情緒打分")
@@ -174,19 +194,76 @@ if fred_key:
 2. 貨幣政策立場判定 (鷹派/鴿派/中立)
 3. 重點分析與逐條評分表格 (Markdown Format)"""
                                     
-                                    # 使用正確的官方標準模型
                                     model = genai.GenerativeModel("gemini-3.8-flash")
                                     response = model.generate_content(prompt)
                                     st.markdown(response.text)
                                 except Exception as e:
                                     if "503" in str(e) or "UNAVAILABLE" in str(e):
-                                        st.warning("⚠️ **Google 伺服器目前流量較大（高負載）**，此為暫時現象。請稍候幾秒鐘後再次點擊按鈕即可！")
+                                        st.warning("⚠️ **Google 伺服器目前流量較大**，請稍候再試！")
                                     else:
                                         st.error(f"AI 分析時發生錯誤: {e}")
                         else:
-                            st.warning("尚無新聞數據可供分析。")
+                            st.warning("尚無新聞數據。")
                 else:
-                    st.warning("👈 請在側邊欄輸入 Gemini API Key（或設定在 Secrets 中）以啟用 AI 文本情緒分析功能。")
+                    st.warning("👈 請在側邊欄輸入 Gemini API Key 以啟用 AI 分析。")
+
+        # 頁籤 5: AI 總經與數據對話室 (New!)
+        with tab5:
+            st.subheader("💬 AI 總經與數據諮詢助理")
+            st.markdown("你可以直接向 AI 詢問當前儀表板中的數據代表什麼意義，或探討總體經濟情勢（例如：*「目前的 10Y-2Y 利差代表什麼？對股市有何影響？」*）。")
+            
+            if not gemini_key:
+                st.warning("👈 請先在側邊欄輸入 Gemini API Key，才能使用對話機器人功能。")
+            else:
+                # 初始化聊天記錄
+                if "messages" not in st.session_state:
+                    st.session_state.messages = []
+
+                # 顯示歷史對話
+                for message in st.session_state.messages:
+                    with st.chat_message(message["role"]):
+                        st.markdown(message["content"])
+
+                # 使用者輸入框
+                if user_query := st.chat_input("向 AI 提問有關總經或金融市場的問題..."):
+                    st.session_state.messages.append({"role": "user", "content": user_query})
+                    with st.chat_message("user"):
+                        st.markdown(user_query)
+
+                    with st.chat_message("assistant"):
+                        with st.spinner("AI 正在思考中..."):
+                            try:
+                                # 將當前儀表板的即時數據作為 Context 注入系統提示詞中
+                                context_info = f"""
+                                當前儀表板抓取到的最新即時總經與市場數據如下：
+                                - CPI 物價指數: {latest_cpi:.1f}
+                                - 10年期美債殖利率: {latest_10y:.2f}%
+                                - 2年期美債殖利率: {latest_2y:.2f}%
+                                - 10Y-2Y 美債利差: {latest_spread:.2f}% ({'已倒掛' if latest_spread < 0 else '正常'})
+                                - 美國失業率: {latest_unemp:.1f}%
+                                - 聯邦基金利率: {latest_fed:.2f}%
+                                """
+                                
+                                chat_model = genai.GenerativeModel(
+                                    model_name="gemini-3.8-flash",
+                                    system_instruction=f"你是一位專業的總體經濟學家與金融分析師。請結合以下即時數據來回答使用者的問題：\n{context_info}"
+                                )
+                                
+                                # 組合對話歷史
+                                history_for_gemini = [
+                                    {"role": m["role"] if m["role"] == "user" else "model", "parts": [m["content"]]}
+                                    for m in st.session_state.messages
+                                ]
+                                
+                                chat = chat_model.start_chat(history=history_for_gemini[:-1])
+                                response = chat.send_message(user_query)
+                                
+                                ai_reply = response.text
+                                st.markdown(ai_reply)
+                                st.session_state.messages.append({"role": "assistant", "content": ai_reply})
+                                
+                            except Exception as e:
+                                st.error(f"對話產生錯誤: {e}")
 
     except Exception as e:
         st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
